@@ -1,0 +1,37 @@
+S p q r
+p r (q r)
+B (B (B W) B) C p q r
+p r (q r)
+B (B W) (B B C) p q r
+p r (q r)
+B (B (B W) C) (B B) p q r
+p r (q r)
+S p q r
+p r (q r)
+B (B (B W) B) C p q r
+p r (q r)
+B (B W) (B B C) p q r
+p r (q r)
+B (B (B W) C) (B B) p q r
+p r (q r)
+elaborate on
+elaborate on
+elaborate off
+elaborate off
+C K K a
+elapsed time 0.000 seconds
+a
+elapsed time 0.000 seconds
+S (S (S (S I (K S)) I) I) (S I I)
+elapsed time 0.000 seconds
+S (S (S (S I (K S)) I) I) (S I I)
+W W W
+elapsed time 0.000 seconds
+Reduction limit
+W* W W
+on on off off
+elapsed time 0.000 seconds
+on on off off
+I curry turner grz tromp btmk
+elapsed time 0.000 seconds
+curry turner grz tromp btmk

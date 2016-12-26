@@ -1,0 +1,48 @@
+#!/bin/sh
+
+ulimit -d `ulimit -a -H | grep data | sed 's/^..*  *\([^ ][^ ]*\)$/\1/'`
+ulimit -s `ulimit -a -H | grep stack | sed 's/^..*  *\([^ ][^ ]*\)$/\1/'`
+
+if [ ! -x ./cl ]
+then
+	echo Compile ./cl first
+	exit 1
+fi
+
+if [ ! -d ./tests.output ]
+then
+	mkdir ./tests.output
+fi
+
+for TNAME in tests.in/test.???
+do
+	OUTPUT=`basename $TNAME`
+	echo "Running test $OUTPUT"
+	./cl -p < $TNAME > tests.output/$OUTPUT
+	if [ "$?" != "0" ]
+	then
+		XSTATUS=$?
+		echo Test $OUTPUT exited with non-zero status $XSTATUS
+	fi
+	DESIRED=tests.out/$OUTPUT
+	if [ -r $DESIRED ]
+	then
+		if diff $DESIRED tests.output/$OUTPUT > /dev/null
+		then
+			:
+		else
+			echo "Test $OUTPUT failed"
+		fi
+	else
+		echo "No desired output specified for $OUTPUT"
+	fi
+done
+
+# Run some instances with all command line flags, some
+# nonsense options, etc, for code coverage.
+./cl -m <  /dev/null > /dev/null 2>&1
+./cl -c -d -L tests.in/test.001 -m -p -s -T -t -x -B curry2 -B q -N 10 < /dev/null > /dev/null 2>&1
+./cl -t -B curry -t -CX -N 53 < /dev/null > /dev/null 2>&1
+./cl -t -B smidgeon -t -C X -N 10 < /dev/null > /dev/null 2>&1
+./cl -C S -C K -C I -C B -C C -C W -C M -C T -C J < /dev/null > /dev/null 2>&1
+./cl -p -L tests.in/test.001 -L tests.in/test.002 < /dev/null > /dev/null 2>&1

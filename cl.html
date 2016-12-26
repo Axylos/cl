@@ -1,0 +1,613 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML Basic 1.0//EN" "file:///home/bediger/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en-US">
+<head>
+<title>Combinatory Logic Interpreter v1.6</title>
+</head>
+<body>
+<h1>cl: Combinatory Logic Interpreter</h1>
+<h2>version 1.6</h2>
+<em>last revision: 2011-05-21</em>
+<p><a href="mailto:bediger@stratigery.com">Bruce Ediger</a></p>
+<h1>Table of contents</h1>
+<ol>
+	<li><a href="#INTRO">Introduction</a></li>
+	<li><a href="#STARTING">Starting</a></li>
+	<li><a href="#RUNNING">Using</a></li>
+	<li><a href="#BUILTINS">Built-in Primitives</a></li>
+	<li><a href="#BRACKETS">Bracket Abstraction</a></li>
+	<li><a href="#INSTALL">Building and installing</a></li>
+</ol>
+<h1><a name="INTRO">Introduction</a></h1>
+<p>
+This document describes how to build and use <kbd>cl</kbd> v1.6. <kbd>cl</kbd> interprets
+a programming language with a lot of similarities to various "Combinatory Logic" (CL)
+formal systems. It doesn't exactly interpret any "Combinatory Logic" in that
+it runs on computers with finite CPU speed and a finite memory.
+Most or all formal systems fail to take these limits into account.
+</p>
+<p>
+Release 1.6 fixes a few bugs, tries to improve performance
+by eliminating code from the most common execution path
+and adds a way to stop a reduction when the result
+<a href="#MATCHING">matches a pattern</a>.
+</p>
+<p>
+I started writing this interpreter as a way to test the "graph reduction"
+implementation of a lambda calculator.  Along the way, I bought a copy
+of Raymond Smullyan's <a href="http://www.amazon.com/Mock-Mockingbird-Raymond-M-Smullyan/dp/0192801422/ref=sr_1_3?ie=UTF8&amp;s=books&amp;qid=1226791982&amp;sr=8-3">To Mock A Mockingbird</a>.
+While working that book's problems,
+I ended up making <kbd>cl</kbd> into
+a reasonably complete and usable system.
+</p>
+<p>
+<a href="cl/">Another page</a> documents the design and implementation of
+an earlier version of <kbd>cl</kbd>.
+That document still holds as a good
+description of the internals of <kbd>cl</kbd>.
+</p>
+<h1><a name="STARTING">Starting</a> the interpreter</h1>
+<p>
+After <a href="#INSTALL">building the interpreter's executable</a>,
+you can start it from the command line:
+</p>
+<pre> 7:57AM 87 % ./cl
+CL&gt;
+</pre>
+<p>
+The interpreter uses "<kbd>CL&gt;</kbd>" as its prompt for user input.
+<kbd>cl</kbd> has a strict grammar, so you must type either
+a <a href="#GRAMMAR">term</a> for reduction, or an interpreter command,
+or a command to <a href="#EXAMINE">examine a term</a>.
+</p>
+<p>
+You have to use keyboard end-of-file (usually control-D) to exit <kbd>cl</kbd>.
+</p>
+<p>
+Giving the interpreter a CL term causes it to execute 
+a read-eval-print loop.
+After reading and parsing the input,
+the interpreter prints the input in a minimally-parenthesized representation,
+reduces it to normal form, and prints a text representation of the normal form.
+It prints a prompt, and waits for another user input.
+</p>
+<p>
+<kbd>cl</kbd> does "normal order" evaluation: the leftmost outermost redex
+gets evaluated first.  This seems like the standard for CL, unlike
+for lambda calculus, where a lot of ink gets expended distinguishing between
+"normal order"
+and "applicative order".
+</p>
+<h2>Command line options</h2>
+<table border="0">
+<tr><td>-c</td><td>enable reduction cycle detection</td></tr>
+<tr><td>-d</td><td>debug contractions</td></tr>
+<tr><td>-L  <em>filename</em></td><td>Interpret a file named <em>filename</em> before reading user input</td></tr>
+<tr><td>-m</td><td>on exit, print memory usage summary</td></tr>
+<tr><td>-N <em>number</em></td><td>perform up to <em>number</em> contractions</td></tr>
+<tr><td>-p</td><td>Don't print any prompt.</td></tr>
+<tr><td>-s</td><td>single-step contractions</td></tr>
+<tr><td>-T <em>number</em></td><td>evaluate an expression for up to <em>number</em> seconds</td></tr>
+<tr><td>-t</td><td>trace contractions</td></tr>
+<tr><td>-C <em>combinator</em></td><td>treat <em>combinator</em> as a non-primitive. <em>Combinator</em> one of S, K, I, B, C, W, M, T, J</td></tr>
+<tr><td>-B <em>algorithm</em></td><td>Use <em>algorithm</em> as default for bracket abstraction.  One of <em>curry</em>, <em>curry2</em>, <em>church</em>, <em>tromp</em>, <em>grz</em>, <em>btmk</em>, <em>turner</em></td></tr>
+</table>
+<p>
+The <kbd>-s</kbd> option has no use without the <kbd>-t</kbd> option, but <kbd>-t</kbd> alone can perform
+handy tasks.
+</p>
+<p>
+You can use one or more <kbd>-C <em>combinator</em></kbd> options to confine yourself to a given
+basis, or turn off the K combinator to work in &lambda;I calculi.
+</p>
+<p>
+<kbd>-L <em>filename</em></kbd> can occur more than one time. <kbd>cl</kbd> will interpret the files
+in the order they appear on the command line.
+After the last (or only) file, it prints the <kbd>CL&gt;</kbd> prompt, then waits for interactive
+user input.
+</p>
+<h1><a name="RUNNING">Using</a> the interpreter</h1>
+<h2>Interactive input</h2>
+<p>
+I designed <kbd>cl</kbd> for use as an interactive system, with a user typing
+CL expressions at a prompt. The interpreter reduces the expression
+to a normal form (if it has one), or hits some other limit, like a pre-set
+timeout, count of allowed contractions or the user's patience.
+</p>
+<p>
+The built-in prompt for input is the string "<kbd>CL&gt;</kbd>".
+It appears when the interpreter starts up, or has finished reducing whatever
+expression the user gave it last, or it has executed an interpreter command.
+</p>
+<p>
+You have to type an end-of-file character (almost always control-D) to quit,
+as it has no built-in "exit" or "quit" command.
+</p>
+<p>
+A keyboard interrupt (almost always control-C) can interrupt whatever long-running
+reduction currently takes place.  A keyboard interrupt at the "<kbd>CL&gt;</kbd>"
+prompt will cause the interpreter to exit.
+</p>
+<h3>Non-interactive input</h3>
+<p>
+The <kbd>-p</kbd> command line option causes the interpreter to not print a
+prompt. This might only have use for non-interactive input. The interpreter
+does read from stdin and write to stdout. You can use it as a non-interactive
+"filter", with input and output redirection.
+</p>
+<h3><a name="GRAMMAR">Grammar</a>, briefly</h3>
+<p>
+Expressions consist of either a single term, or two (perhaps implicitly
+parenthesized) terms.
+Terms consist of either a
+<a href="#BUILTINS">built-in primitive</a> or a variable, or a
+parenthesized expression.
+</p>
+<p>
+Built-in pimitives have names consisting of a single upper-case letter.
+Variables (which can also serve as <a href="#ABBREVS">abbreviations</a>)
+can look like C or Java style identifiers: a letter, followed by zero
+or more letters or underscores.
+You cannot define a variable (or an abbreviation) with the same name
+as a built-in pimitive.
+</p>
+<p>
+The interpreter treats primitives and variables as "left associative",
+the standard in the Combinatory Logic literature.
+That means that an expression like this:
+<kbd>I a b c d</kbd> ends up getting treated as though it had parentheses
+like this: <kbd>((((I a) b) c) d)</kbd>
+</p>
+<p>
+To apply one complex term to another, the user must use parentheses.
+Applying <kbd>W (W K)</kbd> to <kbd>C W</kbd> would look like this:
+<kbd>(W (W K)) (C W)</kbd>.
+</p>
+<h3>Parentheses</h3>
+<p>
+Users can parenthesize input expressions as much or as little as they desire,
+up to the limits of left-association and the meaning they wish to convey
+to the interpreter.
+The grammar used by <kbd>cl</kbd> does not
+allow single terms inside paired parentheses. It considers strings
+like "<kbd>(I)</kbd>" as syntax errors. You have to put at least two terms
+inside a pair of parentheses, and parentheses must have matches.
+</p>
+<p>
+The interpreter prints out normal forms in minimal-parentheses style.
+Users have the ability to cut-n-paste output back into the input,
+as output has valid syntax.  No keyboard shortcuts exist to re-use 
+any previous output.
+</p>
+<h2><a name="BUILTINS">Built-in Primitives</a></h2>
+<p>
+I built-in 9 primitive combinators. They contract like this:
+</p>
+<table border="0">
+	<tr><td align="left"><strong>I</strong> a &rarr; a</td></tr>
+	<tr><td align="left"><strong>K</strong> a b &rarr; a</td></tr>
+	<tr><td align="left"><strong>S</strong> a b c &rarr; a c (b c)</td></tr>
+	<tr><td align="left"><strong>B</strong> a b c &rarr; a (b c)</td></tr>
+	<tr><td align="left"><strong>C</strong> a b c &rarr; a c b</td></tr>
+	<tr><td align="left"><strong>W</strong> a b &rarr; a b b</td></tr>
+	<tr><td align="left"><strong>T</strong> a b &rarr; b a</td></tr>
+	<tr><td align="left"><strong>M</strong> a &rarr; a a</td></tr>
+	<tr><td align="left"><strong>J</strong> a b c d &rarr; a b (a d c)</td></tr>
+</table>
+<p>
+This set of built-ins lets you use <kbd>{S, K}</kbd>, <kbd>{S, K, I}</kbd>,
+<kbd>{B, W, C, K}</kbd>, <kbd>{B, M, T, K}</kbd> bases for &lambda;K calculi,
+or
+<kbd>{J, I}</kbd>, <kbd>{B, C, W, I}</kbd> and <kbd>{I, B, C, S}</kbd> as bases for &lambda;I calculi.
+</p>
+<p>
+Built-in combinators require a certain number (one to four) of arguments
+to cause a contraction.  They just sit there without that number of arguments.
+</p>
+<p>
+You can "turn off" any of the nine combinators as built-ins with a <kbd>-C <em>X</em></kbd>
+command line option (<kbd><em>X</em></kbd> is any of the nine built-in combinators).
+No interpreter command exists to turn off or on a combinator during a session.
+</p>
+<h2><a name="BRACKETS">Bracket Abstraction</a></h2>
+<p>
+"Bracket abstraction" names the process of creating a CL
+expression without specified variables, that when evaluated with appropriate arguments, ends up
+giving you the original expression with argument(s) in the place of the specified variables.
+</p>
+<p>
+The <kbd>cl</kbd> interpreter uses the conventional square-bracket
+notation.  For example, to create an expression that will duplicate
+its single argument, one would type:
+</p>
+<p>
+<kbd>CL&gt; [x] x x</kbd>
+</p>
+<p>
+You can use more than one variable inside square brackets, separated
+with commas:
+</p>
+<p>
+<kbd>CL&gt; [a, b, c] a (b c)</kbd>
+</p>
+<p>
+The above square-bracketed expression ends up working through three
+bracket abstractions, abstracting <kbd>c</kbd> from <kbd>a (b c)</kbd>,
+<kbd>b</kbd> from the resulting expression, and <kbd>a</kbd> from
+that expression. You can nest bracket abstractions: <kbd>[a][b][c] a (b c)</kbd>
+should produce the same expression as the example above.
+</p>
+<p>
+A bracket abstraction makes an expression, so you can use them where ever
+you might use any other simple or complex expression, defining an abbreviation,
+a sub-expression of a much larger expression, as an expression to evaluate
+immediately, or inside another bracket abstraction.
+For example, you could create Turing's fixed-point combinator like this:
+</p>
+<pre>CL&gt; <a href="#ABBREVS">def</a> U [x][y] (x(y y x))
+CL&gt; def Yturing (U U)
+</pre>
+<p>
+Note the use of nested bracket abstractions.  The abstraction of <kbd>y</kbd>
+occurs first, then <kbd>x</kbd> gets abstracted from the resulting expression.
+</p>
+<p>
+You could express <kbd>[x][y] (x(y y x))</kbd> 
+as <kbd>[x,y] (x(y y x))</kbd>.  The same nested abstraction occurs.
+</p>
+<h3>Algorithms</h3>
+<p>
+<kbd>cl</kbd> offers seven bracket abstraction algorithms:
+</p>
+	<ul>
+		<li><kbd><a href="#curry">curry</a></kbd> - classic, minimalistic three-rule system for {S,K,I} basis.</li>
+		<li><kbd><a href="#curry2">curry2</a></kbd> - four-rule system for {S,K,I} basis. Hindley and Seldin's Definition 2.18</li>
+		<li><kbd><a href="#tromp">tromp</a></kbd> - John Tromp's nine-rule system for compact results in the {S,K,I} basis.</li>
+		<li><kbd><a href="#turner">turner</a></kbd> - Simplified Turner algorithm, using S,B,C,K,I combinators.</li>
+		<li><kbd><a href="#grz">grz</a></kbd> - the Grzegorczyk algorithm for {B,W,C,K} basis.</li>
+		<li><kbd><a href="#btmk">btmk</a></kbd> - algorithm for {B,T,M,K} basis.</li>
+		<li><kbd><a href="#church">church</a></kbd> - algorithm for {I,J} basis.</li>
+	</ul>
+<p>
+You can set a "default" algorithm with the this command:
+<kbd>abstraction <em>name</em></kbd>. For <kbd><em>name</em></kbd>, substitute
+one of the seven algorithm names above.
+<kbd>cl</kbd> starts with <kbd>curry</kbd> as the default bracket abstraction
+algorithm.
+</p>
+<p>
+You can specify the abstraction algorithm next to the abstracted variable:
+<kbd>CL&gt; [x]btmk (x (K x))</kbd>
+</p>
+<p>
+<kbd>cl's</kbd> grammar allows mixing algorithms, one for each
+pair of square brackets. The resulting expression may not make any sense.
+</p>
+<h3>Bracket Abstraction Algorithms</h3>
+<h4><kbd><a name="curry">curry</a></kbd></h4>
+<ol>
+	<li>[x] x &rarr; <strong>I</strong></li>
+	<li>[x] N &rarr; <strong>K</strong> N&nbsp;&nbsp;&nbsp;&nbsp;<em>x does not appear in N</em></li>
+	<li>[x] M N &rarr; <strong>S</strong> ([x] M) ([x] N)</li>
+</ol>
+<h4><kbd><a name="curry2">curry2</a></kbd></h4>
+<ol>
+	<li>[x] x &rarr; <strong>I</strong></li>
+	<li>[x] N &rarr; <strong>K</strong> N&nbsp;&nbsp;&nbsp;&nbsp;<em>x does not appear in N</em></li>
+	<li>[x] M x &rarr; M&nbsp;&nbsp;&nbsp;&nbsp;<em>x does not appear in M</em></li>
+	<li>[x] M N &rarr; <strong>S</strong> ([x] M) ([x] N)</li>
+</ol>
+<p>
+Hindley &amp; Seldin call this "Definition 2.18" in the 2008 edition of
+<a href="http://www.amazon.com/Lambda-Calculus-Combinators-Introduction-Roger-Hindley/dp/0521898854"><em>Lambda Calculus and Combinators: An Introduction</em></a>.
+This algorithm has the distinct advantage of giving back a single combinator
+when you ask for that combinator's definition as a bracket abstraction.
+<kbd>[p,q,r] p r (q r)</kbd> works out to <strong>S</strong>, and so forth.
+</p>
+<h4><kbd><a name="btmk">btmk</a></kbd></h4>
+<p>
+I put in an algorithm that uses <strong>B</strong>, <strong>T</strong>,
+<strong>M</strong> and <strong>K</strong> combinators. I devised it,
+but presumably someone
+else has come up with this same algorithm in the past.
+The {B, T, M, K} basis is not unknown.
+</p>
+<ol>
+	<li>[x] x   &rarr; <strong>B (T M) K</strong></li>
+	<li>[x] Z   &rarr; <strong> K</strong> Z&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<em>x not appearing in Z</em></li>
+	<li>[x] Q x &rarr; Q                     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<em>x not appearing in Q</em></li>
+	<li>[x] Q P &rarr; <strong>B</strong> Q ([x] P)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<em>x appears only in P, not in Q</em></li>
+	<li>[x] Q P &rarr; <strong>B</strong> (<strong>T</strong> P) ([x] Q)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<em>x appears only in Q, not in P</em></li>
+	<li>[x] Q P &rarr; <strong>B</strong> (<strong>T</strong> (<strong>B</strong> (<strong>T</strong> [x]P) (<strong>B</strong> <strong>B</strong> [x]Q))) (<strong>B</strong> <strong>M</strong> (<strong>B</strong> <strong>B</strong> <strong>T</strong>)) &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<em>x appears in both Q and P</em></li>
+</ol>
+<h4><kbd><a name="grz">grz</a></kbd></h4>
+<p>
+<kbd>cl</kbd> includes an implementation of
+M. Price and H. Simmon's reconstruction of Grzegorcyzk's "g" algorithm, using
+<strong>B</strong>, <strong>C</strong>, <strong>K</strong>, <strong>W</strong>, <strong>I</strong> combinators.
+</p>
+<ol>
+	<li>[x] x   &rarr; <strong>I</strong></li>
+	<li>[x] Z   &rarr; <strong>K</strong> Z&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<em>x not appearing in Z</em></li>
+	<li>[x] Q x &rarr; Q                     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<em>x not appearing in Q</em></li>
+	<li>[x] Q P &rarr; <strong>B</strong> Q ([x] P)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<em>x appears only in P, not in Q</em></li>
+	<li>[x] Q P &rarr; <strong>C</strong> ([x]Q) P&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<em>x appears only in Q, not in P</em></li>
+	<li><a name="GRZ6">[x] Q P &rarr; <strong>W</strong>((<strong>B</strong>(<strong>C</strong>([x]Q)))([x]P))&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</a><em>x appears in both P and Q</em></li>
+</ol>
+<p>
+If you consider <strong>W K</strong> as a replacement for <strong>I</strong>,
+you can get away with using <strong>B</strong>, <strong>C</strong>, <strong>K</strong>
+and <strong>W</strong>.
+</p>
+<h4><kbd><a name="church">church</a></kbd></h4>
+<p>
+Abstraction for I,J basis from A. Church,
+<em><a href="http://www.ncbi.nlm.nih.gov/pmc/articles/PMC1076585/pdf/pnas01757-0043.pdf
+">A Proof of Freedom From Contradiction</a></em>,
+Proceedings of National Academy of Sciences, Vol 21, 1935, page 275.
+</p>
+<ol>
+ <li>[x] x    &rarr; <strong>I</strong></li>
+ <li>[x] U V  &rarr; <strong>J</strong> (<strong>J</strong> <strong>I</strong> <strong>I</strong>) ([x]V) (U <strong>I</strong> <strong>J</strong>)  <em>where x appears only in V</em></li>
+ <li>[x] U V  &rarr; <strong>J</strong> (<strong>J</strong> <strong>I</strong> <strong>I</strong>) V [x]U  <em>where x appears only in U</em></li>
+ <li>[x] U V  &rarr; <strong>J</strong> (<strong>J</strong> <strong>I</strong> <strong>I</strong>) (<strong>J</strong> <strong>I</strong> <strong>I</strong>) (<strong>J</strong> <strong>I</strong> (<strong>J</strong> (<strong>J</strong> <strong>I</strong> <strong>I</strong>) (<strong>J</strong> <strong>I</strong> <strong>I</strong>) (<strong>J</strong> (<strong>J</strong> <strong>I</strong> <strong>I</strong>) [x]U (<strong>J</strong> (<strong>J</strong> <strong>I</strong> <strong>I</strong>) [x]V <strong>J</strong>))))
+  <em>where x appears in U and V.</em></li>
+</ol>
+<p>
+The {I,J} basis constitutes a "&lambda;I" basis.  All well-formed abstractions
+contain the abstracted variable in the "body" of the abstraction.
+The above algorithm will not work given input like <kbd>[x,y]x</kbd>,
+where the abstracted variable <kbd>y</kbd> does not appear in the expression
+out of which <kbd>y</kbd> gets abstracted.
+In fact, that input crashes the interpreter.
+</p>
+<h4><a name="tromp"><kbd>tromp</kbd></a></h4>
+<p>
+John Tromp created a nine rule algorithm
+(in <a href="http://homepages.cwi.nl/~tromp/cl/LC.pdf">Binary Lambda Calculus and Combinatory Logic</a>)
+which optimizes for the minimum number of
+<strong>S</strong> and <strong>K</strong> combinators in the abstracted
+expression.  Tromp wants to get a small self-interpreter, and he confines
+himself to just <strong>S</strong> and <strong>K</strong> combinators.
+For example, the "S K M &rarr; S K" rule could change to "S K M &rarr; K I",
+if you have an <strong>I</strong> primitive.
+</p>
+<ol>
+	<li>[x](<strong>S</strong> <strong>K</strong> M)        &rarr; <strong>S</strong> <strong>K</strong>                  <em>(For all M)</em></li>
+	<li>[x] M             &rarr; <strong>K</strong> M                  <em>(x not appearing in M)</em></li>
+	<li>[x] x             &rarr; <strong>I</strong></li>
+	<li>[x] M x           &rarr; M                    <em>(x not appearing in M)</em></li>
+	<li>[x] x M x         &rarr; [x] (<strong>S</strong> <strong>S</strong> <strong>K</strong> x M)</li>
+	<li>[x] (M (N L))     &rarr; [x] (<strong>S</strong> ([x] M) N L)  <em>(M, N combinators)</em></li>
+	<li>[x] ((M N) L)     &rarr; [x] (<strong>S</strong> M ([x] L) N)  <em>(M, L combinators)</em></li>
+	<li>[x] ((M L) (N L)) &rarr; [x](<strong>S</strong> M N L)         <em>(M, N combinators)</em></li>
+	<li>[x] M N           &rarr; <strong>S</strong> ([x] M) ([x] N)</li>
+</ol>
+<p>
+Phrases like <em>M, N combinators</em> in rules 6, 7 and 8
+mean "M, N have no variables, free or otherwise".  This abstraction algorithm has the
+goal of smallest resulting expression. For Tromp's purposes, any variable exists
+for the purpose of abstracting it out of the expression. These rules don't produce
+the smallest resulting expression if you abstract another variable from them.
+</p>
+<p>
+I implemented rule 8 by doing a depth-first traversal of parts of parse trees to
+determine if the potential "L" portions of the rule equate.
+A faster method of doing that may exist.
+</p>
+<h4><a name="turner"><kbd>turner</kbd></a></h4>
+<ol>
+	<li>[x] x   &rarr; <strong>I</strong></li>
+	<li>[x] N x &rarr; N&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<em>x not appearing in N</em></li>
+	<li>[x] N   &rarr; <strong>K</strong> N&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<em>x not appearing in N</em></li>
+	<li>[x] M N &rarr; <strong>C</strong> ([x]M) N&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<em>x appears only in M, not in N</em></li>
+	<li>[x] M N &rarr; <strong>B</strong> M ([x] N)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<em>x appears only in N, not in M</em></li>
+	<li>[x] M N &rarr; <strong>S</strong> ([x]M) ([x]N)&nbsp;&nbsp;&nbsp;<em>x appears in both M and N</em></li>
+</ol>
+<h2><a name="ABBREVS">Defining abbreviations</a></h2>
+	<ul>
+		<li><kbd>define <em>name</em> <em>expression</em></kbd></li>
+		<li><kbd>def <em>name</em> <em>expression</em></kbd></li>
+		<li><kbd>reduce <em>expression</em></kbd></li>
+	</ul>
+<p>
+<kbd>define</kbd> and <kbd>def</kbd> allow a user to introduce "abbreviations"
+to the input. Each time the abbreviation appears in input, <kbd>cl</kbd> makes a copy
+of the expression so abbreviated, and puts that copy in the input.
+No matter how complex the expression, an
+abbreviation still comprises a single term. Effectively, the interpreter puts
+the expanded abbreviation in a pair of parentheses.
+</p>
+<p>
+<kbd>def</kbd> makes an easy-to-type abbreviation of <kbd>define</kbd>.
+</p>
+<p>
+A name in interpreter input has the same format as a Java or C identifier:
+a letter, followed by zero or more letters, digits or underscores.
+</p>
+<p>
+The <kbd>reduce</kbd> command produces an expression, just
+like a bracket abstraction.  Unlike <kbd>define</kbd> or <kbd>def</kbd>,
+you can use <kbd>reduce</kbd> anywhere
+an expression would fit, as part of a larger expression, as part of an
+abbreviation, or as part of a bracket abstraction.
+</p>
+<h2><a name="EXAMINE">Information about expressions</a></h2>
+	<ul>
+		<li><kbd><a name="SIZE">size</a> <em>expression</em></kbd> - print the number of atoms in <em>expression</em>.</li>
+		<li><kbd><a name="LENGTH">length</a> <em>expression</em></kbd> - print the number of atoms plus number of applications in <em>expression</em>.</li>
+		<li><kbd><a name="PRINT">print</a> <em>expression</em></kbd> - print human-readable representation, with abbreviations expanded, but without evaluation.</li>
+		<li><kbd><a name="PRINTC">printc</a> <em>expression</em></kbd> - print <a href="#CANON">canonical</a> representation, with abbreviations substituted, but without evaluation.</li>
+		<li><kbd>redexes <em>expression</em></kbd> - print a count of possible contractions in <em>expression</em>, regardless of order of evaluation.</li>
+		<li><kbd><em>expression</em> = <em>expression</em></kbd> - determine lexical equivalence of any two expressions, after abbreviation substitution, but without evaluation.</li>
+	</ul>
+<p>
+<kbd>print</kbd> lets you see what abbreviations expand to, without evaluation, as does <kbd>printc</kbd>.
+The "=" sign lets you determine <em>lexical</em> equality.  All combinators, variables and parentheses
+have to match as strings, otherwise "=" deems the expressions not equivalent.
+You can put in explicit <kbd>reduce</kbd> commands on both sides of an "=",
+otherwise, no evaluation takes place.
+</p>
+<p>
+<kbd>size</kbd> and <kbd>length</kbd> seem redundant, but authorities
+measure CL expressions different ways.  These two methods should cover the
+vast majority of cases.
+</p>
+<h2>Intermediate output and single-stepping</h2>
+	<ul>
+		<li><kbd>trace on|off</kbd></li>
+		<li><kbd>debug on|off</kbd></li>
+		<li><kbd>step on|off</kbd></li>
+	</ul>
+<p>
+You can issue any of these commands without an "on" or "off" argument
+to inquire about the current state of the directive.
+</p>
+<p>
+<kbd>trace</kbd> and <kbd>debug</kbd> make for
+increasingly verbose output. <kbd>trace</kbd> shows the expression
+after each contraction, <kbd>debug</kbd> adds information about which
+branch of an application it evaluates.
+</p>
+<p>
+<kbd>detect</kbd> causes <kbd>trace</kbd> to also print a count
+of possible contractions (not all of them normal order reductions),
+and mark contractable primitives with an asterisk.
+</p>
+<p>
+<kbd>step on</kbd> causes the interpreter to stop after each contraction,
+print the intermediate expression, and wait, at a <kbd>?</kbd> prompt
+for user input. Hitting return goes to the next contraction, <kbd>n</kbd>
+or <kbd>q</kbd> terminates the reduction, and <kbd>c</kbd> causes it
+to quit single-stepping.
+</p>
+<h2>Reduction information and control</h2>
+	<ul>
+		<li><kbd>timer on|off</kbd> - turn on/off per-reduction elapsed time output.</li>
+		<li><kbd>timeout 0|N</kbd>- stop reducing after <kbd>N</kbd> seconds.</li>
+		<li><kbd>count 0|N</kbd> - stop reducing after <kbd>N</kbd> contractions.</li>
+		<li><kbd>cycles on|off</kbd></li>
+		<li><kbd>detect on|off</kbd></li>
+	</ul>
+<p>
+You can turn time outs off by using a 0 (zero) second timeout.
+Similarly, you can turn contraction-count-limited-evaluation off
+with a 0 (zero) count.
+</p>
+<kbd>timer on</kbd> also times <a href="#BRACKETS">bracket abstraction</a>.
+	</ul>
+<p>
+Some CL expressions end up creating a cycle: <kbd>M M</kbd> or <kbd>W W W</kbd>
+or <kbd>B (W K) (W (W K)) (B (W K) (W (W K)))</kbd>.  After a certain number of
+contractions, the interpreter ends up with an expression it has already encountered.
+If you issue the <kbd>cycles on</kbd> command, the interpreter keeps track of 
+every expression in the current reduction, and stops when it detects a cyclical
+reduction.
+</p>
+<p><kbd>detect on</kbd> causes the interpreter to count and mark primitives eligible
+for contraction (with an asterisk),
+regardless of reduction order.  It does "normal order" reduction, but ignores that
+for the contraction count. This only has utility with <kbd>trace on</kbd>.
+</p>
+<p>
+Turning cycle detection on will add time to an
+expression's reduction, as will possible contraction detection.
+</p>
+<h2><a name="MATCHING">Matching a pattern during reduction</a></h2>
+<p>
+<kbd>cl</kbd> v1.6 adds a way to control reduction: stop when the (partially) 
+reduced expression matches a pattern.
+<kbd>cl</kbd> can perform pattern matching after each contraction, when
+the user sets a pattern using the <kbd>match</kbd> command.
+<kbd>unmatch</kbd> destroys the internal state created by <kbd>match</kbd>,
+so the user can't recall a previous <kbd>match</kbd> except by complete
+re-entry of the command.
+</p>
+	<ul>
+		<li><kbd>match <em>pattern</em></kbd> - stop reduction if and when <em>pattern</em> appears.</li>
+		<li><kbd>unmatch</kbd> - relieve the interpreter of checking for a pattern match during reduction. </li>
+	</ul>
+<p>
+Patterns look like <a href="#GRAMMAR">expressions</a> with one exception.
+An asterisk ('*') acts as a wildcard, matching any expression.
+Any other variable or built-in primitive ocurring in the pattern matches
+itself literally.
+</p>
+<p>
+For example, issuing the command <kbd>match S K K</kbd> would cause the reduction of
+<kbd>S (I K) (S K) K</kbd> to stop after a single contraction.
+</p>
+<h2>Reading in files</h2>
+	<ul>
+		<li><kbd>load "<em>filename</em>"</kbd></li>
+	</ul>
+<p>
+You have to double-quote filenames with whitespace or
+non-alphanumeric characters in them.
+You can use absolute filenames (beginning with "/") or you can 
+filenames relative to the current working directory of the <kbd>cl</kbd>
+process.
+</p>
+<h2><a name="CANON">Canonical Expression Representation</a></h2>
+<p>
+The <kbd><a href="#PRINTC">printc</a></kbd> command, and cycle detection output
+use a canonical form of representing a CL expression.
+</p>
+<p>
+In this case, "canonical" means: pre-order, depth-first, left-to-right traversal of the parse tree,
+output of a period (".") for each application, and a space before each combinator or variable.
+</p>
+<p>A simple application (<kbd>K I</kbd>, for example) looks like this: <kbd>.K I</kbd></p>
+<p>A more complex application (<kbd>P R (Q R)</kbd>) looks like this: <kbd>..P R.Q R</kbd></p>
+<p>
+The advantage to this sort of notation is that every application appears explicitly, and
+variant, semantically-equivalent parentheses don't appear.
+</p>
+<h1><a name="INSTALL">Building and installing</a></h1>
+<p>
+I developed this program on Slackware and Arch Linuxes.
+I used versions of the C compilers GCC,
+<a href="http://www.cs.princeton.edu/software/lcc/">LCC</a>,
+<a href="http://pcc.ludd.ltu.se/">PCC</a>,
+<a href="http://bellard.org/tcc/">TCC</a>
+and <a href="http://clang.llvm.org/">Clang</a>.
+I tried to make it as ANSI-C
+as possible by using various compilers, not allowing any compiler warnings
+when building, and using as many warning flags for GCC compiles as possible.
+</p>
+<p>
+I expect it will build on any *BSD-based system, but I haven't tried that.
+</p>
+<ol>
+	<li>Get the source code. You can:
+		<ul>
+			<li><a href="cl-1.6.tar.gz">Download</a> via your browser.</li>
+			<li>Download using wget: <kbd>wget http://www.stratigery.com/cl-1.6.tar.gz</kbd></li>
+		</ul>
+	</li>
+	<li>Unpack source code.  From the command line: <kbd>tar xzf cl-1.6.tar.gz</kbd>
+	</li>
+	<li>Change directory.  From the command line: <kbd>cd cl-1.6</kbd>
+	</li>
+	<li>Compile source code. From the command line: <kbd>make gnu</kbd>.<br/>
+	That target ("gnu") should work for almost every linux or BSD computer.
+		Other make targets might work better. <kbd>make cc</kbd> uses 
+	traditionally-unix-named tools, and may work better on Solaris.
+	Traditional, AT&amp;T derived <kbd>lex</kbd> will require a minor edit
+	to file <kbd>lex.l</kbd>
+	</li>
+	<li>At this point, you can test the newly-compiled executable.
+	From the command line: <kbd>./runtests</kbd>.  Most of the tests should
+	run quite rapidly, in under a second.  At least two of the tests run
+	for 30 seconds or so, and at least one of the tests provokes
+	a syntax error message from the interpreter.
+	</li>
+	<li>Install the interpreter if you want, or you can execute it in-place.
+	To install, use the <kbd>cp</kbd> or <kbd>mv</kbd> commands to move or
+	copy the executable to where ever you want it.  It does not care what
+	directory it resides in, and it does not look for configuration files
+	anywhere.
+	</li>
+</ol>
+</body>
+</html>
